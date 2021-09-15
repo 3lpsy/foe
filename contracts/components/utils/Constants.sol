@@ -8,4 +8,5 @@ contract Constants {
     uint256 public constant MAX_Y = 10;
     uint256 public constant MAX_BLK_INT = 5;
     uint256 public constant MIN_BLK_INT = 1000;
+    uint256 public constant MOVE_RANGE = 4;
 }

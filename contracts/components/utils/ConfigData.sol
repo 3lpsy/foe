@@ -2,24 +2,31 @@
 pragma solidity ^0.8.0;
 
 contract ConfigData {
-    struct Config {
-        uint256 id;
-        uint256 xLen;
-        uint256 yLen;
+    struct BoardConfig {
+        uint256 sideLen;
         uint256 minPlayers;
         uint256 maxPlayers;
+        bool isPublic;
+        uint256 requiredStakeInWei;
+    }
+    struct PawnConfig {
+        uint256 startingHealth;
+        uint256 startingPoints;
+    }
+    struct IntervalConfig {
         uint256 interval;
         uint256 joinableForBlocks;
         uint256 startDeadlineBlocks;
-        uint256 requiredStakeInWei;
-        uint256 startingHealth;
-        uint256 startingPoints;
-        address gameCreator;
-        bool isPublic;
     }
-    Config public config;
+    uint256 gameId;
+    address gameCreator;
+
+    BoardConfig public boardConfig;
+    PawnConfig public pawnConfig;
+    IntervalConfig public intervalConfig;
+
     modifier onlyGameCreator() {
-        require(msg.sender == config.gameCreator);
+        require(msg.sender == gameCreator);
         _;
     }
 }

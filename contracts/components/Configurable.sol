@@ -8,13 +8,22 @@ import "./utils/ConfigData.sol";
 
 contract Configurable is Constants, Statable, Ownable, ConfigData, Players {
     // should only be called by scoreboard
-    function configure(
-        Config memory _config,
-        address _gameCreator,
-        uint256 _id
-    ) external onlyOwner onlyState(State.Unconfigured) {
-        require(_config.xLen <= MAX_X && _config.xLen >= MIN_X);
-        require(_config.yLen <= MAX_Y && _config.yLen >= MIN_Y);
+
+    function init(uint256 _id, address _gameCreator)
+        external
+        onlyOwner
+        onlyState(State.Unconfigured)
+    {
+        gameId = _id;
+        gameCreator = _gameCreator;
+    }
+
+    function configureInterval(IntervalConfig calldata _config)
+        external
+        onlyOwner
+        onlyState(State.Unconfigured)
+    {
+        require(gameCreator != address(0));
         require(
             _config.interval <= MAX_BLK_INT && _config.interval >= MIN_BLK_INT
         );
@@ -31,14 +40,34 @@ contract Configurable is Constants, Statable, Ownable, ConfigData, Players {
             _config.startDeadlineBlocks <= 10000 &&
                 _config.startDeadlineBlocks >= MIN_BLK_INT
         );
-        require(_config.maxPlayers <= (_config.xLen * _config.yLen) / 4);
-        config = _config;
-        config.id = _id;
-        config.gameCreator = _gameCreator;
-        if (!config.isPublic) {
-            allowedPlayers[config.gameCreator] = true;
+        intervalConfig = _config;
+    }
+
+    function configurePawn(PawnConfig calldata _config)
+        external
+        onlyOwner
+        onlyState(State.Unconfigured)
+    {
+        pawnConfig = _config;
+    }
+
+    function configureBoard(BoardConfig calldata _config)
+        external
+        onlyOwner
+        onlyState(State.Unconfigured)
+    {
+        require(intervalConfig.interval > 0);
+        require(pawnConfig.startingHealth > 0);
+
+        require(_config.sideLen <= MAX_X && _config.sideLen >= MIN_X);
+        require(_config.sideLen <= MAX_Y && _config.sideLen >= MIN_Y);
+        require(_config.maxPlayers <= (_config.sideLen * _config.sideLen) / 4);
+        boardConfig = _config;
+
+        if (!boardConfig.isPublic) {
+            allowedPlayers[gameCreator] = true;
         }
-        // board = new address[](_config.xLen * _config.yLen);
+        // board = new address[](_config.sideLen * _config.sideLen);
         changeState(State.WaitingForGameCreator);
     }
 }

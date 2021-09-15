@@ -3,10 +3,10 @@ pragma solidity ^0.8.0;
 
 contract Actionable {
     enum ActionType {
+        Unconfirmed,
         Move,
         Shoot,
-        Stay,
-        BadAction
+        Noop
     }
 
     struct Action {
@@ -14,5 +14,10 @@ contract Actionable {
         uint256 moveCoord;
         address shootTarget;
         ActionType actionType;
+    }
+
+    function decodeAction(bytes32 _action) public returns (Action memory) {
+        Action memory _decodedAction;
+        return _decodedAction;
     }
 }

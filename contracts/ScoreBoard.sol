@@ -12,14 +12,10 @@ contract ScoreBoard {
 
     constructor() {}
 
-    function createGame(Game.Config memory _config) external {
-        require(_config.gameCreator == address(0));
+    function createGame() external {
+        // require(gameCreator == address(0));
         Game _addr = new Game();
         uint256 _id = activeGames.length;
-        console.log("Configuring..");
-        _addr.configure(_config, msg.sender, _id);
-        console.log("Post Configure..");
-
         games[_id] = _addr;
         activeGames[_id] = _id;
         uint256[] storage _createdGames = createdGames[msg.sender];

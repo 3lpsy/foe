@@ -25,7 +25,7 @@ contract RunningState is
     mapping(address => bytes32[3]) requestedStartingCoords;
     mapping(address => bool) confirmedStartingCoords;
     mapping(address => bytes32) submittedRoundActions;
-    mapping(address => bytes32) confirmedRoundActions;
+    mapping(address => Action) confirmedRoundActions;
 
     modifier onlyTicker() {
         require(msg.sender == requiredToTick);
@@ -37,25 +37,61 @@ contract RunningState is
         onlyAlive
         onlyState(State.AcceptingActions)
     {
+        // cannot commit before interval passes
+        require(
+            block.number > startBlock + intervalConfig.interval,
+            "Interval not reached. Too early"
+        );
         submittedRoundActions[msg.sender] = _actionHash;
     }
 
-    function reveal(
-        bytes32 _secret,
-        ActionType _actionType,
-        bytes32 _action
-    ) external onlyAlive onlyState(State.ConfirmingActions) {
+    function isRoundConfirmed() public returns (bool) {
+        address[] memory _alivePlayers = getAlivePlayers();
+        for (uint256 ii; ii < countAlivePlayers(); ii++) {
+            if (
+                confirmedRoundActions[_alivePlayers[ii]].actionType ==
+                ActionType.Unconfirmed
+            ) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    function reveal(bytes32 _secret, bytes32 _action)
+        external
+        onlyAlive
+        onlyState(State.ConfirmingActions)
+    {
         require(
-            _verifyAction(_secret, _actionType, _action),
-            "Invalid action submitted"
+            block.number > startBlock + (intervalConfig.interval * 2),
+            "Interval x2 not reached. Too early"
         );
+        // require(
+        //     _verifyAction(_secret, _actionType, _action),
+        //     "Invalid action submitted"
+        // );
+        Action memory _decodedAction = decodeAction(_action);
+        confirmedRoundActions[msg.sender] = _decodedAction;
+        if (isRoundConfirmed()) {
+            changeState(State.AwaitingTick);
+        }
     }
 
     function tick() external onlyPlayer onlyState(State.AwaitingTick) {
         // check if called by non ticker and outside required tick parameters
+        require(msg.sender == requiredToTick);
+
         // kill ticker if so and make caller new ticker and return early
         // loop over each confirmed action
-        // check if there exists bytes there
+        address[] memory _alivePlayers = getAlivePlayers();
+        for (uint256 ii; ii < _alivePlayers.length; ii++) {
+            address _player = _alivePlayers[ii];
+            Action memory _action = confirmedRoundActions[_player];
+            if (_action.actionType == ActionType.Move) {
+                move(_action, _player);
+            } else if (_action.actionType == ActionType.Shoot) {}
+        }
         // perform each action
         // move:
         // check if pawn is alive
@@ -70,12 +106,38 @@ contract RunningState is
         // clear submit/reveal data and change state
     }
 
+    function move(Action memory _action, address _player)
+        internal
+        returns (bool)
+    {
+        Pawn memory _pawn = board[_player][_action.personalPawnId];
+        uint256 _moveCoord = _action.moveCoord;
+
+        if (isCoordTakenByAlivePawn(_moveCoord)) {
+            doPawnReceiveHit(_player, _action.personalPawnId);
+            return false;
+        }
+
+        if (!isPawnAlive(_pawn)) {
+            doPawnReceiveHit(_player, _action.personalPawnId);
+            return false;
+        }
+
+        if (!isWithinMoveRange(_pawn.coord, _moveCoord)) {
+            doPawnReceiveHit(_player, _action.personalPawnId);
+            return false;
+        }
+        // wall hacks
+        _pawn.coord = _moveCoord;
+        board[_player][_action.personalPawnId] = _pawn;
+    }
+
     function closeGameToNewUsers() external onlyState(State.Open) onlyPlayer {
-        if (block.number > (startBlock + config.startDeadlineBlocks)) {
+        if (block.number > (startBlock + intervalConfig.startDeadlineBlocks)) {
             changeState(State.WaitingForCoordReveal);
         } else {
             require(
-                block.number > (config.joinableForBlocks + startBlock),
+                block.number > (intervalConfig.joinableForBlocks + startBlock),
                 "Cannot close game to new players yet."
             );
             for (uint256 ii; ii < players.length; ii++) {
@@ -114,17 +176,17 @@ contract RunningState is
         payable
     {
         require(
-            msg.value >= config.requiredStakeInWei,
+            msg.value >= boardConfig.requiredStakeInWei,
             "Insufficient stake amount"
         );
-        if (!config.isPublic) {
+        if (!boardConfig.isPublic) {
             require(
                 allowedPlayers[msg.sender] == true,
                 "Not authorized to join game"
             );
         }
         if (state == State.WaitingForGameCreator) {
-            require(msg.sender == config.gameCreator);
+            require(msg.sender == gameCreator);
         }
         _addPlayer(msg.sender);
         requestedStartingCoords[msg.sender] = _requestedStartingCoords;
@@ -137,12 +199,16 @@ contract RunningState is
     {
         uint256 _newCoordCount = 0;
         for (uint256 ii; ii < _coords.length; ii++) {
+            bytes32 _requestedCoords = requestedStartingCoords[msg.sender][ii];
             require(
-                _verifyCoords(_secret, _coords[ii]),
+                _verifyCoords(_requestedCoords, _secret, _coords[ii]),
                 "Unable to verify one of starting coordinates"
             );
             uint256 _coord = _coords[ii];
-            if (_coord > 0 && _coord <= (config.xLen * config.yLen)) {
+            if (
+                _coord > 0 &&
+                _coord <= (boardConfig.sideLen * boardConfig.sideLen)
+            ) {
                 // they messed up
                 continue;
             } else {
@@ -153,8 +219,8 @@ contract RunningState is
                 }
                 Pawn memory _newPawn = Pawn(
                     _coord,
-                    config.startingPoints,
-                    config.startingHealth
+                    pawnConfig.startingPoints,
+                    pawnConfig.startingHealth
                 );
                 board[msg.sender][_newCoordCount] = _newPawn;
                 _newCoordCount++;
@@ -163,19 +229,21 @@ contract RunningState is
         confirmedStartingCoords[msg.sender] = true;
     }
 
-    function _verifyAction(
-        bytes32 _secret,
-        ActionType _actionType,
-        bytes32 _action
-    ) internal returns (bool) {
-        return true;
-    }
+    // function _verifyAction(
+    //     bytes32 _secret,
+    //     ActionType _actionType,
+    //     bytes32 _action
+    // ) internal returns (bool) {
+    //     return true;
+    // }
 
-    function _verifyCoords(bytes32 _secret, uint256 coords)
-        internal
-        returns (bool)
-    {
-        return true;
+    function _verifyCoords(
+        bytes32 _original,
+        bytes32 _secret,
+        uint256 _coords
+    ) internal pure returns (bool) {
+        bytes32 _revealed = keccak256(abi.encodePacked(_coords, _secret));
+        return _revealed == _original;
     }
 
     function _addPlayer(address _player) internal {
