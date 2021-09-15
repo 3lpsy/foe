@@ -1,15 +1,5 @@
-# Basic Sample Hardhat Project
+# A Search and Destroy Game
 
-This project demonstrates a basic Hardhat use case. It comes with a sample contract, a test for that contract, a sample script that deploys that contract, and an example of a task implementation, which simply lists the available accounts.
+In foe, players start with a set number of pawns on the board. After the players have joined and confirmed their starting positions, they can make a single move each round. They can either move a certain number (3 by default) spaces or shoot at another player's pawn that is certain number spaces (3 by default) away.
 
-Try running some of the following tasks:
-
-```shell
-npx hardhat accounts
-npx hardhat compile
-npx hardhat clean
-npx hardhat test
-npx hardhat node
-node scripts/sample-script.js
-npx hardhat help
-```
+At the moment, the project only consists of a backend, thought a frontend may be developed over time.
