@@ -10,17 +10,36 @@ contract Board is Constants, ConfigData, Players {
     struct Pawn {
         uint256 coord;
         uint256 health;
-        uint256 points;
     }
     mapping(address => Pawn[3]) board;
+    mapping(address => uint256) points;
+    uint256 ticks;
 
     modifier onlyAlive() {
         require(isAlive(msg.sender));
         _;
     }
 
+    function usePoint(address _player) public {
+        if (points[_player] > 0) {
+            points[_player] = points[_player] - 1;
+        }
+    }
+
     function isPawnAlive(Pawn memory _pawn) public pure returns (bool) {
         return _pawn.health > 0;
+    }
+
+    function isPlayerHavePointByDat(address _player)
+        public
+        view
+        returns (bool)
+    {
+        return isPlayerHavePoint(_player);
+    }
+
+    function isPlayerHavePoint(address _player) public view returns (bool) {
+        return points[_player] > 0;
     }
 
     function isPawnAliveByDat(address _player, uint256 _id)
@@ -31,6 +50,12 @@ contract Board is Constants, ConfigData, Players {
         Pawn[3] storage _pawns = board[_player];
         Pawn memory _pawn = _pawns[_id];
         return isPawnAlive(_pawn);
+    }
+
+    function distributePoints(uint256 count) internal {
+        for (uint256 ii; ii < players.length; ii++) {
+            points[players[ii]] = points[players[ii]] + count;
+        }
     }
 
     function isAlive(address _a) internal view returns (bool) {
@@ -55,6 +80,24 @@ contract Board is Constants, ConfigData, Players {
         return count;
     }
 
+    function getPawnAtCoord(uint256 _coord)
+        public
+        view
+        returns (address, uint256)
+    {
+        for (uint256 ii; ii < players.length; ii++) {
+            address _player = players[ii];
+            Pawn[3] memory _pawns = board[_player];
+            for (uint256 jj; jj < _pawns.length; jj++) {
+                uint256 _playerCoord = _pawns[jj].coord;
+                if (_coord == _playerCoord) {
+                    return (_player, jj);
+                }
+            }
+        }
+        return (address(0), 0);
+    }
+
     function getAlivePlayers() public view returns (address[] memory) {
         uint256 _count = 0;
         address[] memory _players = new address[](countAlivePlayers());
@@ -65,6 +108,14 @@ contract Board is Constants, ConfigData, Players {
             }
         }
         return _players;
+    }
+
+    function isWithinShootRange(uint256 _coord, uint256 _target)
+        internal
+        view
+        returns (bool)
+    {
+        return isWithinRange(_coord, _target, MOVE_RANGE);
     }
 
     function isWithinMoveRange(uint256 _coord, uint256 _target)

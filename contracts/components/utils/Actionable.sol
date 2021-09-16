@@ -12,11 +12,11 @@ contract Actionable {
     struct Action {
         uint256 personalPawnId;
         uint256 moveCoord;
-        address shootTarget;
+        uint256 shootTarget;
         ActionType actionType;
     }
 
-    function decodeAction(bytes32 _action) public returns (Action memory) {
+    function decodeAction(bytes32 _action) public pure returns (Action memory) {
         Action memory _decodedAction;
         return _decodedAction;
     }

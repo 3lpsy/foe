@@ -12,17 +12,13 @@ async function main() {
   // If this script is run directly using `node` you may want to call compile
   // manually to make sure everything is compiled
   // await hre.run('compile');
-  describe("Basic Setup", function () {
-    beforeEach(async () => {
-      // We get the contract to deploy
-      const Scoreboard = await hre.ethers.getContractFactory("Scoreboard");
-      const scoreBoard = await Scoreboard.deploy();
 
-      let tx = await scoreBoard.deployed();
-
-      console.log("scoreBoard deployed to:", scoreBoard.address);
-    });
-  });
+  // We get the contract to deploy
+  const Scoreboard = await hre.ethers.getContractFactory("ScoreBoard");
+  const scoreBoard = await Scoreboard.deploy();
+  await scoreBoard.deployed();
+  let tx = await scoreBoard.deployed();
+  console.log("scoreBoard deployed to:", scoreBoard.address);
 }
 
 // We recommend this pattern to be able to use async/await everywhere

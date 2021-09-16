@@ -45,7 +45,7 @@ contract RunningState is
         submittedRoundActions[msg.sender] = _actionHash;
     }
 
-    function isRoundConfirmed() public returns (bool) {
+    function isRoundConfirmed() public view returns (bool) {
         address[] memory _alivePlayers = getAlivePlayers();
         for (uint256 ii; ii < countAlivePlayers(); ii++) {
             if (
@@ -78,6 +78,18 @@ contract RunningState is
         }
     }
 
+    function clearRoundData() internal {
+        for (uint256 ii; ii < players.length; ii++) {
+            submittedRoundActions[players[ii]] = bytes32(0);
+            confirmedRoundActions[players[ii]] = Action(
+                0,
+                0,
+                0,
+                ActionType.Unconfirmed
+            );
+        }
+    }
+
     function tick() external onlyPlayer onlyState(State.AwaitingTick) {
         // check if called by non ticker and outside required tick parameters
         require(msg.sender == requiredToTick);
@@ -90,20 +102,57 @@ contract RunningState is
             Action memory _action = confirmedRoundActions[_player];
             if (_action.actionType == ActionType.Move) {
                 move(_action, _player);
-            } else if (_action.actionType == ActionType.Shoot) {}
+            } else if (_action.actionType == ActionType.Shoot) {
+                shoot(_action, _player);
+            }
         }
-        // perform each action
-        // move:
-        // check if pawn is alive
-        // check if target spot is in bounds
-        // check if empty
-        // move
-        // attac:
-        // check if pawn is alive
-        // check if target within reach
-        // attack
-        // distribute points
-        // clear submit/reveal data and change state
+
+        ticks = ticks + 1;
+        if (ticks % 3 == 0) {
+            distributePoints(1);
+        }
+        clearRoundData();
+    }
+
+    function shoot(Action memory _action, address _player)
+        internal
+        returns (bool)
+    {
+        Pawn memory _pawn = board[_player][_action.personalPawnId];
+        uint256 _shootTarget = _action.shootTarget;
+
+        if (!isPawnAlive(_pawn)) {
+            return false;
+        }
+
+        if (!isCoordTakenByAlivePawn(_shootTarget)) {
+            usePoint(_player);
+            return false;
+        }
+
+        if (!isPlayerHavePoint(_player)) {
+            doPawnReceiveHit(_player, _action.personalPawnId);
+            return false;
+        }
+
+        if (!isWithinShootRange(_pawn.coord, _shootTarget)) {
+            usePoint(_player);
+            return false;
+        }
+
+        // wall hacks
+        usePoint(_player);
+        address _targetPlayer;
+        uint256 _targetPawnId;
+        (_targetPlayer, _targetPawnId) = getPawnAtCoord(_shootTarget);
+        if (_targetPlayer == address(0)) {
+            return false;
+        }
+        if (!isPawnAliveByDat(_targetPlayer, _targetPawnId)) {
+            return false;
+        }
+        doPawnReceiveHit(_targetPlayer, _targetPawnId);
+        return true;
     }
 
     function move(Action memory _action, address _player)
@@ -113,12 +162,16 @@ contract RunningState is
         Pawn memory _pawn = board[_player][_action.personalPawnId];
         uint256 _moveCoord = _action.moveCoord;
 
+        if (!isPawnAlive(_pawn)) {
+            return false;
+        }
+
         if (isCoordTakenByAlivePawn(_moveCoord)) {
             doPawnReceiveHit(_player, _action.personalPawnId);
             return false;
         }
 
-        if (!isPawnAlive(_pawn)) {
+        if (!isPlayerHavePoint(_player)) {
             doPawnReceiveHit(_player, _action.personalPawnId);
             return false;
         }
@@ -129,7 +182,9 @@ contract RunningState is
         }
         // wall hacks
         _pawn.coord = _moveCoord;
+        usePoint(_player);
         board[_player][_action.personalPawnId] = _pawn;
+        return true;
     }
 
     function closeGameToNewUsers() external onlyState(State.Open) onlyPlayer {
@@ -217,11 +272,8 @@ contract RunningState is
                     bool _found;
                     (_coord, _found) = _getNearestAvailCoord(_coord);
                 }
-                Pawn memory _newPawn = Pawn(
-                    _coord,
-                    pawnConfig.startingPoints,
-                    pawnConfig.startingHealth
-                );
+                Pawn memory _newPawn = Pawn(_coord, pawnConfig.startingHealth);
+                points[msg.sender] = points[msg.sender] + 1;
                 board[msg.sender][_newCoordCount] = _newPawn;
                 _newCoordCount++;
             }
